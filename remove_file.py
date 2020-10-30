@@ -1,6 +1,8 @@
 import json
 import boto3
 import os
+import datetime
+import dateutil.tz
 
 # boto3 S3 initialization
 s3_client = boto3.client("s3")
@@ -8,7 +10,7 @@ s3_client = boto3.client("s3")
 
 def lambda_handler(event, context):
     
-   # Read Destination Bucket Location from the Environment Object
+   # Read Destination Bucket Location 
    destination_bucket_name = os.environ['DESTINATION_BUCKET']
   
 
@@ -36,9 +38,7 @@ def lambda_handler(event, context):
    file_key_name = event['Records'][0]['s3']['object']['key']
    print("File name =", file_key_name)
 
-   
-
-   # set prefix based on which bucket it came from
+   print(event)
    if CBC01 in source_bucket_name:
        prefix=CBC01
    elif  CBC02 in source_bucket_name:
@@ -49,14 +49,17 @@ def lambda_handler(event, context):
        prefix=CBC04        
    else:
        prefix='UNMATCHED'
-
+   
+   # Setting the Timezone to US Eastern to prefix the object    
+   eastern = dateutil.tz.gettz('US/Eastern')
+   timestamp=datetime.datetime.now(tz=eastern).strftime("%H-%M-%S-%m-%d-%Y")
    # Copy Source Object
    if(prefix != 'UNMATCHED'):
        copy_source_object = {'Bucket': source_bucket_name, 'Key': file_key_name}
        # S3 copy object operation with the desired prefix
-       key =prefix+'/'+file_key_name
+       key =prefix+'/'+timestamp+'/'+file_key_name
        s3_client.copy_object(CopySource=copy_source_object, Bucket=destination_bucket_name, Key=key)
-       # Read the Etag back after copying the file
+       #Read the Etag back after copying the file
        dest_etag = s3_client.head_object(Bucket=destination_bucket_name,Key=key)['ETag'][1:-1]
 
        if(dest_etag==source_etag):
@@ -70,7 +73,6 @@ def lambda_handler(event, context):
         statusCode=400
         message='Desired CBC prefix not found'
 
-    # Return appropriate status and response
    return {
        'statusCode': statusCode,
        'body': json.dumps(message)
